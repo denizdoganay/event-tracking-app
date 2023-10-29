@@ -1,17 +1,16 @@
 package router
 
 import (
-	"net/http"
-
+	"event-tracking-app/handlers"
 	"github.com/gorilla/mux"
-
-	handlers "event-tracking-app/handlers"
+	"net/http"
 )
 
 func Start() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/upsert", handlers.UpsertEvent).Methods("POST")
+	router.HandleFunc("/get-events", handlers.GetAllEvents).Methods("GET")
 
 	http.ListenAndServe(":8080", router)
 }
