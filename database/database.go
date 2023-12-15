@@ -13,11 +13,21 @@ import (
 
 type Event struct {
 	gorm.Model
-	Id     int `gorm:"primaryKey; autoIncrement"`
-	UserId int
-	Type   string
-	Url    string
-	Time   string
+	Id      int `gorm:"primaryKey; autoIncrement"`
+	UserId  int
+	Type    string
+	Url     string
+	Time    string
+	Details map[string]interface{} `gorm:"-"`
+	Param1  string
+	Param2  string
+}
+
+type EventParams struct {
+	gorm.Model
+	EventName string
+	Param1    string
+	Param2    string
 }
 
 var Db *gorm.DB
@@ -30,17 +40,17 @@ func ConnectDb() {
 		panic(err)
 	}
 
-	db.AutoMigrate(&Event{})
+	db.AutoMigrate(&Event{}, &EventParams{})
 	Db = db
 }
 
 func GetClickHouseConn() (driver.Conn, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{"pq0xtq6316.eu-west-1.aws.clickhouse.cloud:9440"},
+		Addr: []string{"ht3qo8ftnx.eu-west-1.aws.clickhouse.cloud:9440"},
 		Auth: clickhouse.Auth{
-			Database: "user_events",
+			Database: "default",
 			Username: "default",
-			Password: "rY4V8~rS6jcCK",
+			Password: "y5~2wQRrmN8Bs",
 		},
 		ClientInfo: clickhouse.ClientInfo{
 			Products: []struct {

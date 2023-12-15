@@ -31,7 +31,14 @@ func UpsertEvent(w http.ResponseWriter, r *http.Request) {
 
 	defer conn.Close()
 
-	batch, err := conn.PrepareBatch(context.Background(), "INSERT INTO events (user_id, type, url, time) VALUES (?, ?, ?, ?)")
+	if len(event.Details) > 0 {
+		if err := handleCustomParams(&event); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	batch, err := conn.PrepareBatch(context.Background(), "INSERT INTO user_events (user_id, type, url, time, param1, param2) VALUES (?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -42,6 +49,8 @@ func UpsertEvent(w http.ResponseWriter, r *http.Request) {
 		event.Type,
 		event.Url,
 		event.Time,
+		event.Param1,
+		event.Param2,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -54,6 +63,31 @@ func UpsertEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintf(w, "id: %d, type: %s, url: %s, time: %s", event.UserId, event.Type, event.Url, event.Time)
+}
+
+func handleCustomParams(event *database.Event) error {
+	var params database.EventParams
+
+	columnNameQuery := "SELECT param1, param2 FROM events_params WHERE event = ?"
+	fmt.Print(database.Db.Raw(columnNameQuery, event.Type))
+	result := database.Db.Raw(columnNameQuery, event.Type).Scan(&params)
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if paramName, ok := event.Details[params.Param1]; ok {
+		event.Param1 = fmt.Sprintf("%v", paramName)
+	}
+
+	if paramName, ok := event.Details[params.Param2]; ok {
+		event.Param2 = fmt.Sprintf("%v", paramName)
+	}
+
+	if err := database.Db.Save(event).Error; err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func GetAllEvents(w http.ResponseWriter, r *http.Request) {
