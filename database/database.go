@@ -2,7 +2,7 @@ package database
 
 import (
 	//"context"
-	"crypto/tls"
+
 	"fmt"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -33,7 +33,7 @@ type EventParams struct {
 var Db *gorm.DB
 
 func ConnectDb() {
-	dsn := "host=localhost port=5432 user=postgres password=root dbname=event-tracking-app sslmode=disable"
+	dsn := "host=localhost port=5432 user=denizdoganay password=root dbname=event-tracking-app sslmode=disable"
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -45,8 +45,10 @@ func ConnectDb() {
 }
 
 func GetClickHouseConn() (driver.Conn, error) {
+	/*
 	conn, err := clickhouse.Open(&clickhouse.Options{
 		Addr: []string{"ht3qo8ftnx.eu-west-1.aws.clickhouse.cloud:9440"},
+
 		Auth: clickhouse.Auth{
 			Database: "default",
 			Username: "default",
@@ -68,6 +70,27 @@ func GetClickHouseConn() (driver.Conn, error) {
 			InsecureSkipVerify: true,
 		},
 	})
+	*/
+
+	conn, err := clickhouse.Open(&clickhouse.Options{
+        Addr: []string{"localhost:9000"}, 
+        Auth: clickhouse.Auth{
+            Database: "event_tracking_app", 
+            Username: "default",            
+            Password: "",                   
+        },
+        ClientInfo: clickhouse.ClientInfo{
+            Products: []struct {
+                Name    string
+                Version string
+            }{
+                {Name: "an-example-go-client", Version: "0.1"},
+            },
+        },
+        Debugf: func(format string, v ...interface{}) {
+            fmt.Printf(format, v)
+        },
+    })
 
 	if err != nil {
 		panic(err)
