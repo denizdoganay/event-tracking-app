@@ -1,11 +1,12 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"event-tracking-app/database"
 	"fmt"
 	"net/http"
+
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
 func UpsertEvent(w http.ResponseWriter, r *http.Request) {
@@ -23,6 +24,41 @@ func UpsertEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": "localhost:9092"})
+	if err != nil {
+		fmt.Printf("Failed to create producer: %s\n", err)
+		return
+	}
+
+	defer p.Close()
+
+	topic := "testing"
+
+	if err := handleCustomParams(&event); err != nil {
+		fmt.Printf("Error handling custom params: %v\n", err)
+		return
+	}
+
+	serialized, err := json.Marshal(map[string]interface{}{
+		"UserId":  event.UserId,
+		"Type":    event.Type,
+		"Url":     event.Url,
+		"Time":    event.Time,
+		"Param1":  event.Param1,
+		"Param2":  event.Param2,
+	})
+	if err != nil {
+		fmt.Printf("Error marshaling event to JSON: %v\n", err)
+		return
+	}
+
+	msg := &kafka.Message{
+		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
+		Value:          serialized,
+	}
+	p.Produce(msg, nil)
+
+	/*
 	conn, err := database.GetClickHouseConn()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -61,15 +97,15 @@ func UpsertEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	*/
 
-	fmt.Fprintf(w, "id: %d, type: %s, url: %s, time: %s", event.UserId, event.Type, event.Url, event.Time)
+	//fmt.Fprintf(w, "id: %d, type: %s, url: %s, time: %s", event.UserId, event.Type, event.Url, event.Time)
 }
 
 func handleCustomParams(event *database.Event) error {
 	var params database.EventParams
 
 	columnNameQuery := "SELECT param1, param2 FROM events_params WHERE event = ?"
-	fmt.Print(database.Db.Raw(columnNameQuery, event.Type))
 	result := database.Db.Raw(columnNameQuery, event.Type).Scan(&params)
 	if result.Error != nil {
 		return result.Error

@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.17.1
+	github.com/confluentinc/confluent-kafka-go v1.9.2
 	github.com/gorilla/mux v1.8.1
 	github.com/rs/cors v1.10.1
 	gorm.io/driver/postgres v1.5.4

@@ -1,8 +1,6 @@
 package database
 
 import (
-	//"context"
-
 	"fmt"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
