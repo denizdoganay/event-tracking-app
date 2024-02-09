@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"event-tracking-app/database"
 	"fmt"
 	"net/http"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"gorm.io/gorm"
 )
 
 func UpsertEvent(w http.ResponseWriter, r *http.Request) {
@@ -18,11 +20,20 @@ func UpsertEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := database.Db.Create(&event).Error; err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-
+	if err := handleDynamicParams(&event); err != nil {
+		fmt.Printf("Error handling custom params: %v\n", err)
 		return
 	}
+
+	/*
+		if err := database.Db.Create(&event).Error; err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			fmt.Print("sasa1")
+			return
+		}
+	*/
+
+	fmt.Print("asasa2")
 
 	p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": "localhost:9092"})
 	if err != nil {
@@ -34,18 +45,13 @@ func UpsertEvent(w http.ResponseWriter, r *http.Request) {
 
 	topic := "testing"
 
-	if err := handleCustomParams(&event); err != nil {
-		fmt.Printf("Error handling custom params: %v\n", err)
-		return
-	}
-
 	serialized, err := json.Marshal(map[string]interface{}{
-		"UserId":  event.UserId,
-		"Type":    event.Type,
-		"Url":     event.Url,
-		"Time":    event.Time,
-		"Param1":  event.Param1,
-		"Param2":  event.Param2,
+		"UserId": event.UserId,
+		"Type":   event.Type,
+		"Url":    event.Url,
+		"Time":   event.Time,
+		"Param1": event.Param1,
+		"Param2": event.Param2,
 	})
 	if err != nil {
 		fmt.Printf("Error marshaling event to JSON: %v\n", err)
@@ -59,56 +65,86 @@ func UpsertEvent(w http.ResponseWriter, r *http.Request) {
 	p.Produce(msg, nil)
 
 	/*
-	conn, err := database.GetClickHouseConn()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	defer conn.Close()
-
-	if len(event.Details) > 0 {
-		if err := handleCustomParams(&event); err != nil {
+		conn, err := database.GetClickHouseConn()
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-	}
 
-	batch, err := conn.PrepareBatch(context.Background(), "INSERT INTO user_events (user_id, type, url, time, param1, param2) VALUES (?, ?, ?, ?, ?, ?)")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+		defer conn.Close()
 
-	err = batch.Append(
-		event.UserId,
-		event.Type,
-		event.Url,
-		event.Time,
-		event.Param1,
-		event.Param2,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+		if len(event.Details) > 0 {
+			if err := handleCustomParams(&event); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
 
-	if err := batch.Send(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+		batch, err := conn.PrepareBatch(context.Background(), "INSERT INTO user_events (user_id, type, url, time, param1, param2) VALUES (?, ?, ?, ?, ?, ?)")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		err = batch.Append(
+			event.UserId,
+			event.Type,
+			event.Url,
+			event.Time,
+			event.Param1,
+			event.Param2,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if err := batch.Send(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	*/
 
 	//fmt.Fprintf(w, "id: %d, type: %s, url: %s, time: %s", event.UserId, event.Type, event.Url, event.Time)
 }
 
-func handleCustomParams(event *database.Event) error {
+func handleDynamicParams(event *database.Event) error {
 	var params database.EventParams
 
-	columnNameQuery := "SELECT param1, param2 FROM events_params WHERE event = ?"
-	result := database.Db.Raw(columnNameQuery, event.Type).Scan(&params)
+	/*
+		columnNameQuery := "SELECT param1, param2 FROM events_params WHERE event = ?"
+		result := database.Db.Raw(columnNameQuery, event.Type).Scan(&params)
+		if result.Error != nil {
+			return result.Error
+		}
+	*/
+
+	// Attempt to retrieve existing params from events_params table
+	result := database.Db.Table("events_params").Where("event = ?", event.Type).First(&params)
 	if result.Error != nil {
-		return result.Error
+		// If the record doesn't exist, create a new one with dynamic params
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			params = database.EventParams{
+				EventName: event.Type,
+				Param1:    "", // Replace with a default value or set based on your logic
+				Param2:    "", // Replace with a default value or set based on your logic
+			}
+
+			for key := range event.Details {
+				if params.Param1 == "" {
+					params.Param1 = key
+				} else if params.Param2 == "" {
+					params.Param2 = key
+					break
+				}
+			}
+
+			if err := database.Db.Table("events_params").Create(&params).Error; err != nil {
+				return err
+			}
+		} else {
+			return result.Error
+		}
 	}
 
 	if paramName, ok := event.Details[params.Param1]; ok {
@@ -120,6 +156,7 @@ func handleCustomParams(event *database.Event) error {
 	}
 
 	if err := database.Db.Save(event).Error; err != nil {
+		fmt.Print("xddd")
 		return err
 	}
 

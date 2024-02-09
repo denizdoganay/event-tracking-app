@@ -21,5 +21,5 @@ func Start() {
 	router.HandleFunc("/get-events", handlers.GetEvents).Methods("POST")
 
 	http.Handle("/", corsHandler)
-	http.ListenAndServe(":8080", router)
+	http.ListenAndServe(":8081", router)
 }
